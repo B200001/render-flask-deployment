@@ -1,25 +1,22 @@
-import os
 import base64
-import uuid
-import hashlib
-from datetime import datetime
-from functools import wraps
-
+import os
+from flask_bcrypt import Bcrypt
 from flask import Flask, request, jsonify, Response, abort, send_file
 from flask_cors import CORS
-from flask_bcrypt import Bcrypt
-from flask_jwt_extended import (
-    JWTManager, create_access_token, get_jwt_identity, jwt_required
-)
 from werkzeug.security import generate_password_hash, check_password_hash
-
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
-from bson.objectid import ObjectId
+import jwt
+import datetime
+from functools import wraps
+
+import uuid
+from flask import Flask, request, jsonify
+from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
+import datetime
 from gridfs import GridFS
-
 from dotenv import load_dotenv
-
+import hashlib
 #import gridfs
 # from your_database_file import users_collection  # Adjust this import as needed
 
