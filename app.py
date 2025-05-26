@@ -1,22 +1,25 @@
-import base64
 import os
-from flask_bcrypt import Bcrypt
+import base64
+import uuid
+import hashlib
+from datetime import datetime
+from functools import wraps
+
 from flask import Flask, request, jsonify, Response, abort, send_file
 from flask_cors import CORS
+from flask_bcrypt import Bcrypt
+from flask_jwt_extended import (
+    JWTManager, create_access_token, get_jwt_identity, jwt_required
+)
 from werkzeug.security import generate_password_hash, check_password_hash
+
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
-import jwt
-import datetime
-from functools import wraps
-from bson import ObjectId
-import uuid
-from flask import Flask, request, jsonify
-from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
-import datetime
+from bson.objectid import ObjectId
 from gridfs import GridFS
+
 from dotenv import load_dotenv
-import hashlib
+
 #import gridfs
 # from your_database_file import users_collection  # Adjust this import as needed
 
@@ -457,153 +460,33 @@ def get_shared_comments(shared_id):
 
     return jsonify(comments)
 
+@app.route("/api/sharable/add_comments/<shared_id>", methods=["POST"])
+@jwt_required()
+def add_shared_comments(shared_id):
+    current_user = get_jwt_identity()
 
-# @app.route("/api/sharable/get_pdf/<shared_id>", methods=["GET"])
-# def get_shared_pdf(shared_id):
-#     shared = client.db.shared.find_one({"shared_id": shared_id})
-#     if not shared:
-#         return jsonify({"error": "Invalid or expired link"}), 404
+    try:
+        object_id = ObjectId(shared_id)
+    except Exception:
+        return jsonify({"error": "Invalid shared ID"}), 400
 
-#     pdf_id = shared["pdf_id"]
-#     oid = ObjectId(pdf_id)
+    data = request.get_json()
+    if not data or not data.get("comment"):
+        return jsonify({"error": "Missing comment content"}), 400
 
-#     # Fetch PDF document
-#     doc = collection.find_one({'_id': oid})
-#     if not doc:
-#         return jsonify({"error": "File not found"}), 404
+    comment = {
+        "comment_id": str(uuid.uuid4()),
+        "pdf_id": shared_id,
+        "text": data["comment"],
+        "author": current_user.get("email"),  # depends on what you stored in JWT
+        "created-At": datetime.datetime.now()
+    }
 
-#     pdf_data = doc.get('data')
-#     if not pdf_data:
-#         return jsonify({"error": "No PDF data found"}), 404
+    result = comment_collection.insert_one(comment)
 
-#     # Encode binary PDF data as base64
-#     encoded_pdf = base64.b64encode(pdf_data).decode("utf-8")
-
-#     # Fetch comments
-#     comments = list(client.db.comments.find({"pdf_id": pdf_id}))
-#     for comment in comments:
-#         comment["_id"] = str(comment["_id"])
-#         comment["pdf_id"] = str(comment["pdf_id"])
-    
-    
-
-#     return jsonify({
-#         "pdf": {
-#             "filename": doc.get("filename"),
-#             "data": encoded_pdf
-#         },
-#         "comments": comments
-#     })
-
-# @app.route("/api/pdf/shared/<shared_id>", methods=["GET"])
-# def shared_pdf(shared_id):
-    shared_entry = client.db.shared.find_one({"shared_id": shared_id})
-    if not shared_entry:
-        return jsonify({"error": "Invalid or expired shared link"}), 404
-
-    pdf_id = shared_entry["pdf_id"]
-    pdf = client.db.pdfs.find_one({"_id": ObjectId(pdf_id)})
-
-    if not pdf:
-        return jsonify({"error": "PDF not found"}), 404
-
-    return Response(
-        pdf['file_data'],  # or fetch from GridFS if you're using that
-        mimetype='application/pdf',
-        headers={"Content-Disposition": f"inline; filename={pdf.get('filename', 'file.pdf')}"}
-    )
-# @app.route("/api/sharable/get_pdf/<shared_id>", methods=["GET"])
-# def get_shared_pdf(shared_id):
-#     shared = client.db.shared.find_one({"shared_id": shared_id})
-#     if not shared:
-#         return jsonify({"error": "Invalid or expired link"}), 404
-#     print('sssss',shared)
-#     pdf_id = shared["pdf_id"]
-#     oid = ObjectId(pdf_id)
-
-#     # Fetch PDF (from collection or GridFS)
-#     # pdf = collection.find_one({"_id": ObjectId(pdf_id)})
-#     # if not pdf:
-#     #     return jsonify({"error": "PDF not found"}), 404
-
-#     # Fetch comments
-#     comments = list(client.db.comments.find({"pdf_id": pdf_id}))
-
-#     # Clean comment data (e.g., remove ObjectId)
-#     for comment in comments:
-#         comment["_id"] = str(comment["_id"])
-#         comment["pdf_id"] = str(comment["pdf_id"])
-
-#     doc = collection.find_one({'_id': oid})
-#     if not doc:
-#         return abort(404, "File not found")
-
-#     # Extract binary PDF data from document
-#     pdf_data = doc.get('data')
-#     if not pdf_data:
-#         return abort(404, "No PDF data found")
-
-#     # Return PDF file as response
-#     response_data = Response(
-#         pdf_data,
-#         mimetype=doc.get('content_type', 'application/pdf'),
-#         headers={
-#             'Content-Disposition': f'inline; filename="{doc.get("filename", "file.pdf")}"'
-#         }
-#     )
-
-    # response_data = {
-    #     "pdf": {
-    #         "filename": pdf.get("filename"),
-    #         "data": pdf.get("file_data"),  # or handle GridFS stream
-    #     },
-    #     "comments": comments
-    # }
-
-    return (response_data)
+    return jsonify(comment), 200
 
 
-
-# @app.route('/api/pdf/shared/<file_id>')
-# def shared_pdf(file_id):
-#     pdf = collection.find_one({'_id': ObjectId(file_id)})
-#     if pdf and 'file_data' in pdf:
-#         return Response(
-#             pdf['file_data'],
-#             mimetype='application/pdf',
-#             headers={"Content-Disposition": f"inline; filename={pdf.get('filename', 'file.pdf')}"}
-#         )
-#     return {"error": "File not found"}, 404
-
-# @app.route("/api/share", methods=["POST"])
-# def create_share_link():
-#     data = request.get_json()
-#     pdf_id = data.get("pdf_id")
-
-#     if not pdf_id:
-#         return jsonify({"error": "PDF ID required"}), 400
-
-#     shared_id = str(uuid.uuid4())
-#     client.db.shared.insert_one({
-#         "shared_id": shared_id,
-#         "pdf_id": pdf_id,
-#         "created_at": datetime.utcnow()
-#     })
-
-#     return jsonify({"shared_link": f"/shared/{shared_id}"})
-
-# @app.route("/api/shared/<shared_id>", methods=["GET"])
-# def get_shared_pdf(shared_id):
-#     shared_doc = client.db.shared.find_one({"shared_id": shared_id})
-#     if not shared_doc:
-#         return jsonify({"error": "Invalid link"}), 404
-
-#     pdf = client.db.pdfs.find_one({"_id": ObjectId(shared_doc["pdf_id"])})
-#     if not pdf:
-#         return jsonify({"error": "PDF not found"}), 404
-
-#     pdf["_id"] = str(pdf["_id"])  # Convert ObjectId to string for JSON
-#     return jsonify(pdf)
 
 
 # ------------------ Run App ------------------
